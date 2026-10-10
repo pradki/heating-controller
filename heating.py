@@ -159,6 +159,18 @@ class Heating:
     fan_last_decision_ts = 0  # time.monotonic()
 
     @classmethod
+    def is_overheated(cls):
+        """Twardy, niezależny od furnace_temp_setpoint limit bezpieczeństwa -
+        setpoint sam jest już zaciskany do 52-72°C przez shadow_vault
+        (check_and_correct) i nieaktualny czujnik już dziś wyłącza grzanie
+        (fail-safe w pętlach heating()/keeping_fire()), ale to dodatkowa
+        warstwa niezależna od poprawności configu/walidacji nastaw: jeśli
+        furnace_temp_sensor i tak przekroczy MAX_FURNACE_TEMP, przestajemy
+        karmić i dmuchać bez względu na to, co mówi reszta logiki."""
+        furnace_temp_sensor = cls.ds.get_valid_sensor('furnace_temp_sensor')
+        return furnace_temp_sensor is not None and furnace_temp_sensor >= config.MAX_FURNACE_TEMP
+
+    @classmethod
     def state(cls, state=None, desc=""):
         if state is None:
             return cls._state
@@ -218,6 +230,9 @@ class Heating:
 
     @classmethod
     async def feed_now(cls):
+        if cls.is_overheated():
+            print(f'\x1b[31m#{__name__}:feed_now# pominięto - piec przegrzany (>={config.MAX_FURNACE_TEMP}°C)\x1b[0m')
+            return
         feeding_time_setpoint = cls.ds.get_value_setpoint('feeding_time_setpoint')
         await cls.relays.relay_flash_on(config.CHANNELS["feeder"], timeout=feeding_time_setpoint)
         await feeder_log.add_seconds(feeding_time_setpoint)
@@ -232,6 +247,8 @@ class Heating:
         wentylatora w nieskończoność - to jest watchdog, nie tylko odnawiacz."""
         while True:
             await asyncio.sleep(10)
+            if cls.is_overheated():
+                continue
             if cls.fan_wanted and (time.monotonic() - cls.fan_last_decision_ts) < config.FAN_KEEPALIVE_MAX_AGE:
                 try:
                     await cls.relays.relay_flash_on(config.CHANNELS["fan"], timeout=config.FAN_FLASH_DURATION)
@@ -253,6 +270,13 @@ class Heating:
                 print(f'#{__name__}:79# break')
                 cls.state("end of heating", desc=f"{furnace_temp_sensor=} {furnace_temp_setpoint=}")  # dogrzewanie
                 break
+
+            if cls.is_overheated():
+                cls.fan_wanted = False
+                cls.state("overheat", desc=f"{furnace_temp_sensor=} >= MAX_FURNACE_TEMP={config.MAX_FURNACE_TEMP}")
+                await asyncio.sleep(6)
+                continue
+
             # włączyć wentylator - odnawiane niezależnie przez fan_keepalive()
             cls.fan_wanted = True
             cls.fan_last_decision_ts = time.monotonic()
@@ -291,6 +315,11 @@ class Heating:
             if not furnace_temp_sensor or furnace_temp_sensor < furnace_temp_setpoint:
                 print(f'#{__name__}:113# break')
                 break
+
+            if cls.is_overheated():
+                cls.state("overheat", desc=f"{furnace_temp_sensor=} >= MAX_FURNACE_TEMP={config.MAX_FURNACE_TEMP}")
+                await asyncio.sleep(6)
+                continue
 
             monotonic = time.monotonic()
             keeping_fire_interval_setpoint = cls.ds.get_value_setpoint('keeping_fire_interval_setpoint')
@@ -365,9 +394,13 @@ class Heating:
             await asyncio.sleep(6)
 
         await asyncio.sleep(10)
-        print('czekam:215..')
-        task_inside_temp = asyncio.create_task(cls.inside_temp())
-        print('czekam:217..')
+        if config.FLOOR_CONTROL_ENABLED:
+            # Sterowanie podłogówką (zawór mieszający, pompa, uśrednianie
+            # inside_temp) wyłączone świadomie - w budowie osobna logika,
+            # patrz config.FLOOR_CONTROL_ENABLED i README.
+            print('czekam:215..')
+            task_inside_temp = asyncio.create_task(cls.inside_temp())
+            print('czekam:217..')
         await asyncio.sleep(10)
 
         while True:

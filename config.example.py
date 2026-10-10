@@ -49,6 +49,17 @@ FEEDER_PAUSE = 20
 FAN_FLASH_DURATION = 30
 FAN_KEEPALIVE_MAX_AGE = 60
 
+# Twardy, niezależny od furnace_temp_setpoint limit bezpieczeństwa - patrz
+# Heating.is_overheated() w heating.py. furnace_temp_setpoint jest i tak
+# zaciskany do 52-72°C przez shadow_vault, więc to dodatkowa warstwa na
+# wypadek błędnej walidacji/configu, nie pierwsza linia obrony.
+MAX_FURNACE_TEMP = 85
+
+# Sterowanie podłogówką (zawór mieszający, pompa) świadomie wyłączone -
+# niezadowalająca logika, w budowie osobny projekt. Kod zostaje w heating.py
+# (inside_temp/mixing_valve_ctrl/check_overheated_floor), ale się nie uruchamia.
+FLOOR_CONTROL_ENABLED = False
+
 # Pompa podłogówki: jawny TTL i interwał odnawiania zamiast polegania na
 # przypadkowej zbieżności z DEFAULT_LEASE_TTL gatewaya (patrz heating.py,
 # mixing_valve_ctrl). Odnawiamy z dużym zapasem przed wygaśnięciem.
