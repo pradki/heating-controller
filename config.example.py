@@ -27,10 +27,10 @@ LEASE_PRIORITY = 10
 # === Channels (Outputs) ===
 # Numery kanałów na płytce Waveshare (te same, do których odwołuje się
 # waveshare-mqtt-gateway/config.py pod aliasami co_fan, co_feeder, itd.)
-# ignition/pump_boiler: zdefiniowane, ale dziś nieużywane w heating.py -
-# jeśli kiedyś zostaną podłączone, dobierz im świadomie priority/ttl zamiast
-# dziedziczyć wartości domyślne (ignition to najbardziej bezpieczeństwo-
-# krytyczny kanał na płytce).
+# ignition: zdefiniowany, ale dziś nieużywany w heating.py - jeśli kiedyś
+# zostanie podłączony, dobierz mu świadomie priority/ttl zamiast dziedziczyć
+# wartości domyślne (to najbardziej bezpieczeństwo-krytyczny kanał na płytce).
+# pump_boiler: używany przez Heating.pump_boiler_ctrl(), patrz niżej.
 CHANNELS = {
     "fan": 26,
     "feeder": 25,
@@ -65,6 +65,15 @@ FLOOR_CONTROL_ENABLED = False
 # mixing_valve_ctrl). Odnawiamy z dużym zapasem przed wygaśnięciem.
 PUMP_LEASE_TTL = 1800
 PUMP_RENEW_INTERVAL = 900
+
+# === Pompa pieca (kanał "pump_boiler") ===
+# Patrz Heating.pump_boiler_ctrl() - dwa niezależne powody uruchomienia:
+# góra bufora przegrzana (bez pompy grzeje się tylko ona) albo piec przegrzany
+# ponad zadaną o FURNACE_OVERHEAT_MARGIN (typowo zaraz po dorzuceniu drewna).
+BUFF_TOP_PUMP_THRESHOLD = 65   # °C
+FURNACE_OVERHEAT_MARGIN = 10   # °C ponad furnace_temp_setpoint
+PUMP_BOILER_FLASH_DURATION = 180  # s, 3 min
+PUMP_BOILER_CHECK_INTERVAL = 10   # s, jak często sprawdzamy oba warunki
 
 # === Logging / History ===
 LOG_DIRECTORY = "/home/sqna/heating/logs"

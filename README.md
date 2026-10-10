@@ -68,10 +68,32 @@ broker address, the gateway's module name (`RELAY_MODULE`, must match a module a
 configured in `waveshare-mqtt-gateway/config.py`), the physical channel numbers
 (`CHANNELS`), and the relay-lease tuning described below.
 
-`ignition` and `pump_boiler` are defined in `CHANNELS` but not wired into any control
-logic today (a gap that predates this migration, carried over as-is). If they get wired
-up later, give them a deliberately-chosen `priority`/`ttl` rather than inheriting
-defaults - `ignition` in particular is the most safety-sensitive channel on the board.
+`ignition` is defined in `CHANNELS` but not wired into any control logic today (a gap
+that predates this migration, carried over as-is). If it gets wired up later, give it a
+deliberately-chosen `priority`/`ttl` rather than inheriting defaults - it's the most
+safety-sensitive channel on the board. `pump_boiler` *is* wired up - see below.
+
+## Boiler pump (`pump_boiler`)
+
+`Heating.pump_boiler_ctrl()` checks two independent conditions every
+`PUMP_BOILER_CHECK_INTERVAL` (10s) and fires a `PUMP_BOILER_FLASH_DURATION` (3 min) pulse
+whenever either holds:
+
+1. **Buffer top above `BUFF_TOP_PUMP_THRESHOLD`** (65°C) - without circulation, only the
+   top layer of the buffer tank heats up; the pump moves that heat down into the lower
+   layers so the whole tank's capacity gets used.
+2. **Furnace above `furnace_temp_setpoint + FURNACE_OVERHEAT_MARGIN`** (10°C) - typically
+   right after adding wood/coal and the furnace temperature spikes; the pump bleeds the
+   excess into the buffer before the harder `MAX_FURNACE_TEMP` cutoff (`is_overheated()`)
+   would have to step in.
+
+Like `fan_keepalive()`, this is only a *renewer* of a hardware-timed pulse: if the task
+hangs or the service crashes, the pump still turns itself off after
+`PUMP_BOILER_FLASH_DURATION` instead of being stuck on. Both conditions are evaluated
+independently of `is_overheated()` and keep running even while it has tripped - pulling
+heat out of the furnace into the buffer is the right thing to do precisely when the
+furnace is overheating, not something to suppress. The active reason (or `None`) is
+visible in the status payload as `pump_boiler`.
 
 ## Why a separate fan keep-alive task
 

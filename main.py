@@ -38,6 +38,7 @@ async def main():
 
     asyncio.create_task(temp_csv(ds))
     asyncio.create_task(Heating.fan_keepalive())
+    asyncio.create_task(Heating.pump_boiler_ctrl())
 
     while True:
         await Heating.main()

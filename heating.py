@@ -158,6 +158,11 @@ class Heating:
     fan_wanted = False
     fan_last_decision_ts = 0  # time.monotonic()
 
+    # Pompa pieca (kanał "pump_boiler") - patrz pump_boiler_ctrl(). None, dopóki
+    # żaden z dwóch powodów nie trwa; w przeciwnym razie krótki opis, dlaczego
+    # pompa jest akurat żądana (do statusu/diagnostyki).
+    pump_boiler_reason = None
+
     @classmethod
     def is_overheated(cls):
         """Twardy, niezależny od furnace_temp_setpoint limit bezpieczeństwa -
@@ -188,6 +193,7 @@ class Heating:
                 "feeding_timestamp": cls.feeding_timestamp,
                 "feeding_delta": time.monotonic() - cls.feeding_timestamp,
                 "pump_floor": cls.pump_floor,
+                "pump_boiler": cls.pump_boiler_reason,
                 "mqtt_connected": cls.is_connected_callback() if cls.is_connected_callback else None,
             })
             cls.mqtt_pub_callback(topic, msg)
@@ -254,6 +260,44 @@ class Heating:
                     await cls.relays.relay_flash_on(config.CHANNELS["fan"], timeout=config.FAN_FLASH_DURATION)
                 except Exception as e:
                     print(f'\x1b[31m#{__name__}:fan_keepalive# {type(e).__name__} "{e}"\x1b[0m')
+
+    @classmethod
+    async def pump_boiler_ctrl(cls):
+        """Pompa pieca (kanał "pump_boiler") - przenosi ciepło z dwóch
+        niezależnych powodów, sprawdzanych co PUMP_BOILER_CHECK_INTERVAL:
+
+        1) góra bufora > BUFF_TOP_PUMP_THRESHOLD - bez pompy grzeje się tylko
+           górna partia bufora; pompa rozprowadza ciepło na niższe warstwy.
+        2) piec > zadana + FURNACE_OVERHEAT_MARGIN - typowo zaraz po
+           dorzuceniu drewna; pompa odprowadza nadmiar do bufora, zanim
+           zadziała twardy limit is_overheated() (MAX_FURNACE_TEMP).
+
+        Jak fan_keepalive(): to tylko odnawiacz sprzętowego impulsu
+        (PUMP_BOILER_FLASH_DURATION) - jeśli ten task się zawiesi albo usługa
+        padnie, pompa i tak zgaśnie sama po czasie impulsu, nie zostaje
+        włączona na stałe."""
+        while True:
+            await asyncio.sleep(config.PUMP_BOILER_CHECK_INTERVAL)
+
+            buff_top = cls.ds.get_valid_sensor('buff_top_temp_sensor')
+            furnace_temp = cls.ds.get_valid_sensor('furnace_temp_sensor')
+            furnace_setpoint = cls.ds.get_value_setpoint('furnace_temp_setpoint')
+
+            reason = None
+            if buff_top is not None and buff_top > config.BUFF_TOP_PUMP_THRESHOLD:
+                reason = f"bufor góra {buff_top:.1f}>{config.BUFF_TOP_PUMP_THRESHOLD}C"
+            elif (furnace_temp is not None and furnace_setpoint is not None
+                  and furnace_temp > furnace_setpoint + config.FURNACE_OVERHEAT_MARGIN):
+                reason = (f"piec {furnace_temp:.1f}>zadana {furnace_setpoint:.1f}"
+                          f"+{config.FURNACE_OVERHEAT_MARGIN}C")
+
+            cls.pump_boiler_reason = reason
+            if reason:
+                try:
+                    await cls.relays.relay_flash_on(config.CHANNELS["pump_boiler"],
+                                                    timeout=config.PUMP_BOILER_FLASH_DURATION)
+                except Exception as e:
+                    print(f'\x1b[31m#{__name__}:pump_boiler_ctrl# {type(e).__name__} "{e}"\x1b[0m')
 
     @classmethod
     async def heating(cls):  # dogrzewanie zbyt niska temperatura
