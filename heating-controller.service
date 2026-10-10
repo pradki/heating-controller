@@ -1,0 +1,15 @@
+[Unit]
+Description=Heating Control Service
+After=network.target
+
+[Service]
+Type=simple
+User=sqna
+WorkingDirectory=/home/sqna/cave/raspberry/heating-controller
+ExecStart=/home/sqna/venv/cave/bin/python /home/sqna/cave/raspberry/heating-controller/main.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

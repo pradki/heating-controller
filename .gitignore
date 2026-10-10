@@ -1,0 +1,13 @@
+# Lokalna konfiguracja z prawdziwymi adresami IP z sieci lokalnej - szablon w config.example.py
+config.py
+
+# Stan runtime (logi, liczniki, pliki CSV) - generowane przez usługę
+*.csv
+state.json
+
+# Python
+__pycache__/
+*.py[cod]
+
+venv/
+.venv/
