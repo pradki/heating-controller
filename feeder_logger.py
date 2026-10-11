@@ -10,6 +10,22 @@ LOG_DIR = "/home/sqna/cave/logs"
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
+try:
+    import fcntl
+except ImportError:  # Windows (stacja deweloperska) - bez blokady między procesami
+    fcntl = None
+
+
+def _lock_exclusive(f):
+    """Blokada na czas całego odczytu+nadpisania pliku - caveweb dopisuje do
+    tego samego CSV komentarze o tankowaniu (patrz caveweb/feeder_log.py) z
+    OSOBNEGO procesu, więc goły asyncio.Lock tutaj (działa tylko w obrębie tego
+    procesu) nie wystarcza: bez wspólnej blokady systemowej dopisany w złym
+    momencie komentarz zniknąłby przy najbliższym pełnym nadpisaniu pliku przez
+    ten serwis. Zwalnia się sama przy zamknięciu pliku."""
+    if fcntl is not None:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+
 
 class FeederLogger:
     """
@@ -28,32 +44,30 @@ class FeederLogger:
     async def add_seconds(self, seconds: int):
         hour_key = datetime.now().replace(minute=0, second=0, microsecond=0).isoformat()
         async with self._lock:
-            # read existing
-            rows = []
-            try:
-                with open(self.path, newline="") as f:
-                    reader = list(csv.reader(f))
-                    if not reader:
-                        rows = [["hour", "seconds_on"]]
-                    else:
-                        rows = reader
-            except FileNotFoundError:
-                rows = [["hour", "seconds_on"]]
+            # Jeden uchwyt pliku na cały odczyt+nadpisanie, pod jedną blokadą -
+            # patrz _lock_exclusive po to, dlaczego (dwa osobne `open()`, jak
+            # dawniej, zostawiały okno, w którym dopisany z zewnątrz komentarz
+            # ginął przy nadpisaniu).
+            with open(self.path, "a+", newline="") as f:
+                _lock_exclusive(f)
+                f.seek(0)
+                reader = list(csv.reader(f))
+                rows = reader if reader else [["hour", "seconds_on"]]
 
-            header = rows[0] if rows else ["hour", "seconds_on"]
-            body = rows[1:] if len(rows) > 1 else []
+                header = rows[0]
+                body = rows[1:]
 
-            updated = False
-            for r in body:
-                if r[0] == hour_key:
-                    r[1] = str(int(r[1]) + int(seconds))
-                    updated = True
-                    break
-            if not updated:
-                body.append([hour_key, str(int(seconds))])
+                updated = False
+                for r in body:
+                    if r and r[0] == hour_key:
+                        r[1] = str(int(r[1]) + int(seconds))
+                        updated = True
+                        break
+                if not updated:
+                    body.append([hour_key, str(int(seconds))])
 
-            # write back (header + body)
-            with open(self.path, "w", newline="") as f:
+                f.seek(0)
+                f.truncate()
                 writer = csv.writer(f)
                 writer.writerow(header)
                 writer.writerows(body)

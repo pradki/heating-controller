@@ -129,7 +129,7 @@ this code is ever re-enabled or rebuilt.
 | `relay_client.py` | `GatewayRelay` - thin MQTT command publisher to waveshare-mqtt-gateway, channel-number addressed |
 | `manager.py` / `shadow_vault.py` | Sensor/setpoint shadow store (MQTT-backed, survives disconnects) |
 | `mqtt_controller.py` | MQTT client thread (paho-mqtt) |
-| `feeder_logger.py` | CSV on-time logging for the feeder and temperature averages |
+| `feeder_logger.py` | CSV on-time logging for the feeder (`/home/sqna/cave/logs/feeder_log.csv`) - flock'd around the read-rewrite cycle, since `caveweb` appends refuel comments to the same file from a separate process |
 | `heating-controller.service` | systemd unit |
 | `tests/` | Fake-broker tests for `GatewayRelay` (no MQTT broker or hardware required) |
 
