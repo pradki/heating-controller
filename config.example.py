@@ -67,6 +67,16 @@ PUMP_LEASE_TTL = 1800
 PUMP_RENEW_INTERVAL = 900
 
 # === Pompa pieca (kanał "pump_boiler") ===
+# Wyciągnięte do osobnej usługi, github.com/pradki/cave-service-manager
+# (zadania "buffer_top_redistribute"/"furnace_overheat_protect", te same
+# progi/domyślne co niżej) - ten sam powód, co FLOOR_CONTROL_ENABLED wyżej:
+# jedna usługa, która wie o WSZYSTKICH powodach uruchomienia tej samej pompy,
+# zamiast dwóch niezależnych, nieświadomych siebie nawzajem. Kod zostaje w
+# heating.py (Heating.pump_boiler_ctrl()), ale się nie uruchamia - uruchomienie
+# obu naraz oznaczałoby dwie usługi osobno decydujące, kiedy pulsować ten sam
+# przekaźnik.
+PUMP_BOILER_CTRL_ENABLED = False
+
 # Patrz Heating.pump_boiler_ctrl() - dwa niezależne powody uruchomienia:
 # góra bufora przegrzana (bez pompy grzeje się tylko ona) albo piec przegrzany
 # ponad zadaną o FURNACE_OVERHEAT_MARGIN (typowo zaraz po dorzuceniu drewna).
