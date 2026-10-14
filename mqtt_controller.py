@@ -114,8 +114,18 @@ class MQTTController:
 
     def _run_loop(self):
         print(f"Connecting to MQTT {self.host=} {self.port=}")
-        self.client.connect(self.host, self.port, keepalive=30)
         try:
+            # connect_async(), nie connect() - connect() próbuje się połączyć
+            # OD RAZU i rzuca wyjątkiem, gdy broker jeszcze nie przyjmuje
+            # połączeń (typowe zaraz po reboocie Pi, jeśli mosquitto wstaje
+            # choć chwilę wolniej niż ta usługa) - wyjątek nieobsłużony w tym
+            # wątku po cichu go zabija, bez żadnego śladu w systemd (proces
+            # główny i tak żyje dalej, tylko już nigdy się nie połączy).
+            # connect_async() odkłada pierwszą próbę do loop_forever(), które
+            # z retry_first_connection=True faktycznie ponawia - to właśnie
+            # ten retry miał obsłużyć ten przypadek, ale nigdy nie dostawał
+            # szansy (zaobserwowane naprawdę, po reboocie Pi).
+            self.client.connect_async(self.host, self.port, keepalive=30)
             self.client.loop_forever(retry_first_connection=True)
         except Exception as e:
             LOG.exception("MQTT loop error: %s", e)
